@@ -296,3 +296,61 @@ effect is room type or something else)
 
 NEXT ONE: Keeping star rating fixed, going from Entire home to a Private
 room will be -100 (same with shared room - -120/150 maybe)
+
+## Logistic regression
+
+``` r
+new_dataset = 
+  nyc_airbnb %>% 
+  mutate(
+    expensive_apt = as.numeric(price > 500)
+  )
+```
+
+Logistic regression
+
+``` r
+logistic_fit = 
+  glm(
+      expensive_apt ~ stars + borough, 
+      data = new_dataset, 
+      family = binomial())
+
+logistic_fit %>% 
+  broom::tidy() %>% 
+  mutate(
+    term = str_replace(term, "borough", "Borough: "), 
+    estimate = exp(estimate)
+  ) %>% 
+  select(term, OR = estimate, p.value)
+```
+
+    ## # A tibble: 5 × 3
+    ##   term                     OR    p.value
+    ##   <chr>                 <dbl>      <dbl>
+    ## 1 (Intercept)        7.52e-10 0.908     
+    ## 2 stars              2.15e+ 0 0.00000292
+    ## 3 Borough: Brooklyn  2.49e+ 5 0.945     
+    ## 4 Borough: Manhattan 8.11e+ 5 0.940     
+    ## 5 Borough: Queens    1.15e+ 5 0.949
+
+``` r
+new_dataset %>% 
+  modelr::add_predictions(logistic_fit) %>% 
+  mutate(pred = boot::inv.logit(pred))
+```
+
+    ## # A tibble: 40,492 × 7
+    ##    price stars borough neighbourhood room_type       expensive_apt          pred
+    ##    <dbl> <dbl> <chr>   <chr>         <chr>                   <dbl>         <dbl>
+    ##  1    99   5   Bronx   City Island   Private room                0  0.0000000343
+    ##  2   200  NA   Bronx   City Island   Private room                0 NA           
+    ##  3   300  NA   Bronx   City Island   Entire home/apt             0 NA           
+    ##  4   125   5   Bronx   City Island   Entire home/apt             0  0.0000000343
+    ##  5    69   5   Bronx   City Island   Private room                0  0.0000000343
+    ##  6   125   5   Bronx   City Island   Entire home/apt             0  0.0000000343
+    ##  7    85   5   Bronx   City Island   Entire home/apt             0  0.0000000343
+    ##  8    39   4.5 Bronx   Allerton      Private room                0  0.0000000234
+    ##  9    95   5   Bronx   Allerton      Entire home/apt             0  0.0000000343
+    ## 10   125   4.5 Bronx   Allerton      Entire home/apt             0  0.0000000234
+    ## # … with 40,482 more rows

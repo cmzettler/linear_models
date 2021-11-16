@@ -162,6 +162,39 @@ It seems like stars don't really help that much (maybe more of the effect is roo
 
 NEXT ONE: Keeping star rating fixed, going from Entire home to a Private room will be -100 (same with shared room - -120/150 maybe)
 
+## Logistic regression 
+
+```{r}
+new_dataset = 
+  nyc_airbnb %>% 
+  mutate(
+    expensive_apt = as.numeric(price > 500)
+  )
+```
+
+Logistic regression 
+
+```{r}
+logistic_fit = 
+  glm(
+      expensive_apt ~ stars + borough, 
+      data = new_dataset, 
+      family = binomial())
+
+logistic_fit %>% 
+  broom::tidy() %>% 
+  mutate(
+    term = str_replace(term, "borough", "Borough: "), 
+    estimate = exp(estimate)
+  ) %>% 
+  select(term, OR = estimate, p.value)
+
+new_dataset %>% 
+  modelr::add_predictions(logistic_fit) %>% 
+  mutate(pred = boot::inv.logit(pred))
+```
+
+
 
 
 
