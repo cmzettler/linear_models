@@ -1,0 +1,168 @@
+---
+title: "linear models"
+output: github_document
+---
+
+```{r}
+library(tidyverse)
+library(p8105.datasets)
+library(knitr)
+
+knitr::opts_chunk$set(
+  fig.width = 6, 
+  fig.asp = .6, 
+  out.width = "90%"
+)
+```
+
+Bootstrapping helps with hypothesis testing when you're outside of a normal distribution. 
+
+Regression diagnostics
+- getting your model, looking at residuals, and seeing if it looks okay. 
+
+Generalized linear models - logistic regression 
+
+Broom package to tidy up linear model stuff 
+
+## Start to code 
+
+Load NYC Airbnb data
+
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb %>% 
+  mutate(stars = review_scores_location/2) %>% 
+  rename(borough = neighbourhood_group) %>% 
+  filter(borough != "Staten Island") %>% 
+  select(price, stars, borough, neighbourhood, room_type)
+```
+
+Visualizations
+
+```{r}
+nyc_airbnb %>% 
+  ggplot(aes(x = stars, y = price)) + 
+  geom_point()
+```
+
+We have some assumptions that aren't met (there's more variability in price among higher stars than among lower stars)
+
+Let's fit a linear model 
+
+```{r}
+fit = lm(price ~ stars + borough, data = nyc_airbnb)
+```
+
+Let's look at this
+
+```{r}
+fit
+
+summary(fit)
+
+summary(fit)$coef
+
+fit %>% broom::tidy()
+```
+
+Turns summary of fit into a dataframe 
+
+If you want to present output... 
+
+```{r}
+fit %>% broom::tidy() %>% 
+  mutate(term = str_replace(term, "borough", "Borough: ")) %>% 
+  select(term, estimate, p.value) %>% 
+  knitr::kable(digits = 3)
+```
+
+## Diagnostics 
+
+```{r}
+modelr::add_residuals(nyc_airbnb, fit) %>% 
+  ggplot(aes(x = stars, y = resid)) + 
+  geom_point()
+```
+
+Returns a daataframe but has added in the residuals column
+- could use this to compare residuals across many models 
+
+Looks very skewed 
+
+```{r}
+modelr::add_residuals(nyc_airbnb, fit) %>% 
+  ggplot(aes(x = resid)) + 
+  geom_density() + 
+  xlim(-200, 200)
+```
+
+Because the whole distribution goes out to 10,000 it looks like you're missing a bunch of smaller values 
+
+## Interactions? Nesting?
+
+Let's try a different model ...
+
+```{r}
+fit = lm(price ~ stars + room_type, data = nyc_airbnb)
+
+broom::tidy(fit)
+
+fit = lm(price ~ stars * borough + room_type * borough, data = nyc_airbnb)
+
+broom::tidy(fit)
+```
+
+Let's try nesting 
+
+```{r}
+nyc_airbnb %>% 
+  relocate(borough) %>% 
+  nest(data = price:room_type) %>% 
+  mutate(
+    lm_fits = map(.x = data, ~lm(price ~ stars + room_type, data = .x)), 
+    lm_results = map(lm_fits, broom::tidy)) %>% 
+  select(borough, lm_results) %>% 
+  unnest(lm_results) %>% 
+  filter(term == "stars")
+
+```
+
+One more of these examples - Neighborhoods in Manhattan 
+
+```{r}
+manhattan_lm_results_df = 
+  nyc_airbnb %>% 
+  filter(borough == "Manhattan") %>% 
+  select(-borough) %>% 
+  relocate(neighbourhood) %>% 
+  nest(data = price:room_type) %>% 
+  mutate(
+    lm_fits = map(.x = data, ~lm(price ~ stars + room_type, data = .x)), 
+    lm_results = map(lm_fits, broom::tidy)
+  ) %>% 
+  select(neighbourhood, lm_results) %>% 
+  unnest(lm_results)
+
+manhattan_lm_results_df %>% 
+  filter(term == "stars") %>% 
+  ggplot(aes(x = estimate)) + 
+  geom_density()
+
+manhattan_lm_results_df %>% 
+  filter(str_detect(term, "room_type")) %>% 
+  ggplot(aes(x = neighbourhood, y = estimate)) + 
+  geom_point() +
+  facet_grid(~term) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+It seems like stars don't really help that much (maybe more of the effect is room type or something else)
+
+NEXT ONE: Keeping star rating fixed, going from Entire home to a Private room will be -100 (same with shared room - -120/150 maybe)
+
+
+
+
+
