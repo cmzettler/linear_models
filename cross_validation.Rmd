@@ -1,0 +1,129 @@
+---
+title: "cross validation"
+output: github_document
+---
+
+```{r}
+library(tidyverse)
+
+library(modelr)
+library(mgcv)
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+Fitting non-linear models - take his word for it
+
+Model selection is hard - you have competing goals: 
+1) fit your current dataset well 
+2) AIC/ BIC make you pay a price for too much complexity 
+
+If I've done a good job building my model on my first dataset, it should do a good job predicting a second dataset (cross-validation) 
+
+Prediction accuracy - go into testing dataset, get fitted values based on my previous model, if i make good predictions, I'll have a small root mean squared error. We want small RMSE 
+
+Typically you repeat the process MANY times 
+
+Typically just does an 80/20 split and then do it 100 times and look at RMSE look like in each of those cases 
+
+Can also compare models via cross validation or AIC/ BIC 
+
+Prediction as a goal: you want to do cross-validation AFTER you've determined confounders, etc. 
+
+Tools for CV: 
+add_predictions add_residuals rmse crossv_mc 
+
+## Simulate a dataset 
+
+```{r}
+set.seed(1)
+
+nonlin_df = 
+  tibble(
+    id = 1:100, 
+    x = runif(100, 0, 1), 
+    y = 1-10 * (x-0.3) ^2 + rnorm(100, 0, 0.3) 
+  )
+
+nonlin_df %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point()
+```
+
+## Cross-validation by hand (Create splits by hand, plot, fit some models)
+
+```{r}
+train_df = sample_n(nonlin_df, 80)
+
+test_df = anti_join(nonlin_df, train_df, by = "id")
+
+train_df %>% arrange(id)
+test_df %>% arrange(id)
+
+ggplot(train_df, aes(x = x, y = y)) + 
+  geom_point() +
+  geom_point(data = test_df, color = "red")
+```
+
+for cross validation to work, you have to have a real/ full split between train and test dataset
+
+## Fit my models with training dataset
+
+```{r}
+linear_mod = lm(y ~ x, data = train_df)
+smooth_mod = mgcv::gam( y ~ s(x), data = train_df)
+wiggly_mod = mgcv::gam(y ~ s(x, k = 30), sp = 10e-6, data = train_df)
+```
+
+plot the results
+
+```{r}
+train_df %>% 
+  add_predictions(smooth_mod) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point() +
+  geom_line(aes(y = pred))
+
+train_df %>% 
+  add_predictions(wiggly_mod) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point() +
+  geom_line(aes(y = pred))
+
+train_df %>% 
+  add_predictions(linear_mod) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point() +
+  geom_line(aes(y = pred))
+```
+
+The second one - putting too much stuff in the model 
+Third one - not enough! 
+
+## Quantify the results 
+
+```{r}
+rmse(linear_mod, test_df)
+rmse(smooth_mod, test_df)
+rmse(wiggly_mod, test_df)
+```
+
+this function is going to take the linear model, given the coefficients in the linear model, I'm going to take the predictions from the testing df and find the rmse
+
+This worked with one 80/20 split but maybe we try it again and again with different 80/20 splits 
+
+
